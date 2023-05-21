@@ -1,0 +1,850 @@
+---
+title: "Fraud Detection"
+author: "Sugumaran BALASUBRAMANIYAN"
+output:
+  html_notebook:
+    toc: yes
+    theme: cerulean
+    highlight: textmate
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
+
+
+# Project Description:
+
+This R Notebook presents an in-depth analysis and solution for the fraud detection challenge in e-commerce transactions, as part of the partnership between IEEE Computational Intelligence Society (IEEE-CIS) and Vesta Corporation.
+
+This competition is a binary classification problem - i.e. our target variable is a binary attribute (Is the user making the click fraudlent or not?) and our goal is to classify users into "fraudlent" or "not fraudlent" as well as possible.
+
+The notebook explores a large-scale dataset provided by Vesta Corporation, containing diverse features from device types to product details. 
+
+Using R, this notebook guides users through the entire data science pipeline, including data preprocessing, exploratory data analysis, feature engineering, model selection, and evaluation. 
+
+The notebook provides clear and concise code examples, accompanied by detailed explanations and insights into the dataset.
+
+Kaggle Link: https://www.kaggle.com/c/ieee-fraud-detection
+
+Dataset Link: https://drive.google.com/file/d/1ZqlRrTUZNao-I1lZNVztf206vp8QUkqV/view
+
+Github Link: https://github.com/Sugumaran-Balasubramaniyan/IEEE-CIS-Fraud-Detection-using-R/tree/main
+
+# Dataset description
+
+isFraud: This column indicates whether a transaction is fraudulent or not. It is the target variable, with a binary value of 1 for fraud and 0 for legitimate transactions.
+
+TransactionDT: timedelta from a given reference datetime (not an actual timestamp)
+
+TransactionAMT: This column contains the transaction amount or value in USD
+
+ProductCD: This column represents the product code or category associated with the transaction.
+
+card1 - card6: payment card information, such as card type, card category, issue bank, country, etc.
+
+addr1 and addr2: These columns represent address-related information, such as billing or shipping address.
+
+dist1 and dist2: These columns indicate the distance between the transaction location and the address provided.
+
+P_emaildomain and R_emaildomain: These columns contain email domain information for the purchaser (P) and recipient (R) of the transaction, respectively.
+
+C1-C14: These columns represent numerical categorical features associated with the transaction, possibly derived from counting occurrences or frequencies, such as how many addresses are found to be associated with the payment card, etc. The actual meaning is masked.
+
+D1-D15: These columns contain time-related features that may represent the number of days elapsed since a specific event or transaction (timedelta, such as days between previous transaction, etc.)
+
+M1-M9: These columns represent binary categorical features related to match status, indicating whether personal information associated with the transaction matches or not.(match, such as names on card and address, etc.)
+
+V1-V339: Vesta engineered rich features, including ranking, counting, and other entity relations.
+
+#### Categorical Features:
+
+* ProductCD
+* emaildomain
+* card1 - card6
+* addr1, addr2
+* P_emaildomain
+* R_emaildomain
+* M1 - M9
+
+# Installing required packages
+
+```{r}
+# install.packages("tidyverse") 
+# install.packages("keras")
+
+```
+
+# Importing the data
+
+```{r}
+# Loading the dataset from a specific file path
+load("/Users/sugumaran/Documents/EM-LYON/Financial and Data Analysis with R/Final Project/transactions.rdata")
+```
+
+```{r}
+# To display the first few rows of a dataset
+head(transactions)
+```
+
+```{r}
+# Viewing the column names available in the dataset
+colnames(transactions)
+```
+
+
+
+# Data Preprocessing & Exploratory Data Analysis (EDA)
+
+```{r}
+# Initial exploration
+# To display the structure of the dataset and information about its type and contents.  
+str(transactions)
+```
+Summary of the dataset structure:
+
+* Classes: 'tbl_df', 'tbl', and 'data.frame'
+* Number of observations: 590,540
+* Number of variables: 393
+* isFraud: numeric
+* TransactionDT: numeric
+* TransactionAmt: numeric
+* ProductCD: character
+* card1: numeric
+* card2: numeric
+* card3: numeric
+* card4: character
+* card5: numeric
+* card6: character
+* addr1: numeric
+* addr2: numeric
+* dist1: numeric
+* dist2: numeric
+* P_emaildomain: character
+* R_emaildomain: character
+* C1 through C14: numeric
+* D1 through D15: numeric
+* M1 through M9: logical
+* V1 through V45: numeric
+
+
+
+```{r}
+# Loading required library
+library(data.table)
+
+# Function to find the missing values in a dataset
+find_missing_values <- function(data) {
+  # To Convert data frame to data table
+  dt <- as.data.table(data)
+  
+  # To Calculate count and percentage of missing values for each variable
+  missing_counts <- dt[, lapply(.SD, function(x) sum(is.na(x))), .SDcols = names(dt)]
+  missing_percentages <- dt[, lapply(.SD, function(x) sum(is.na(x)) / .N * 100), .SDcols = names(dt)]
+  
+  # To Combine the results into a data table
+  missing_data <- data.table(
+    Variable = names(dt),
+    Missing_Count = unlist(missing_counts),
+    Missing_Percentage = unlist(missing_percentages)
+  )
+  
+  # To Return the resulting data table
+  return(missing_data)
+}
+
+# Calling the function to find missing values on 'transactions' dataset
+missing_values_table <- find_missing_values(transactions)
+
+# Print the resulting data table
+print(missing_values_table)
+```
+
+
+```{r}
+
+# Function to remove the columns with more than 40% of missing values in a given dataset
+remove_columns_with_missing <- function(data, threshold = 0.4) {
+  # To Calculate the number of missing values in each column
+  missing_counts <- colSums(is.na(data))
+  
+  # To Calculate the percentage of missing values in each column
+  missing_percentages <- missing_counts / nrow(data)
+  
+  # To Identify columns with missing percentages above the threshold
+  columns_to_remove <- names(missing_percentages[missing_percentages > threshold])
+  
+  # To Remove columns with missing percentages above the threshold
+  cleaned_data <- data[, !names(data) %in% columns_to_remove]
+  
+  # To Return the cleaned dataset
+  return(cleaned_data)
+}
+
+
+```
+
+```{r}
+# Calling the function to remove columns that has more than 40% of missing values on 'transactions' dataset
+cleaned_data <- remove_columns_with_missing(transactions)
+
+# Viewing the dataset after removing columns
+head(cleaned_data)
+```
+```{r}
+# Calling the function to find missing values on 'cleaned_data' dataset
+missing_values_table_clean_data <- find_missing_values(cleaned_data)
+
+# Printing the resulting data table
+print(missing_values_table_clean_data)
+```
+
+
+```{r}
+# Get the number of rows and columns in the cleaned dataset
+num_rows <- dim(cleaned_data)[1]
+num_columns <- dim(cleaned_data)[2]
+
+# Print the results
+cat("There were", num_columns, "columns with more than 40% of missing values in the dataset and they are removed.\n")
+cat("The 'cleaned_data' dataset contains", num_rows, "rows and", num_columns, "columns.\n")
+```
+
+
+### Plotting a bar plot to view the class imbalance in the dataset
+```{r}
+# Loading the required library
+library(ggplot2)
+
+# Calculating the count of each category
+count_data <- data.frame(table(cleaned_data$isFraud))
+
+# Plot the bar plot with count labels
+ggplot(count_data, aes(x = factor(Var1), y = Freq)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  geom_text(aes(label = Freq), vjust = -0.5, size = 3, color = "black") +
+  labs(x = "isFraud", y = "Count") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  ggtitle("Fraudulent Transactions")
+```
+
+Notice how imbalanced is the dataset!\n
+
+Imbalance means that the number of data points available for different the classes is different.\n
+
+Most of the transactions are non-fraud. If we use this dataset as the base for our predictive models and analysis we might get a lot of errors and our algorithms will probably overfit since it will "assume" that most transactions are not fraud.\n
+
+### Dealing with datetime column "TransactionDT"
+
+```{r}
+
+# Convert TransactionDT column to datetime format
+cleaned_data$TransactionDT <- as.POSIXct(cleaned_data$TransactionDT, origin = "1970-01-01", tz = "UTC")
+
+# Find the maximum and minimum TransactionDT values
+max_transactionDT <- max(cleaned_data$TransactionDT)
+min_transactionDT <- min(cleaned_data$TransactionDT)
+
+# Calculate the difference between min and max TransactionDT values in months
+dt_difference <- round(as.numeric(as.Date(max_transactionDT) - as.Date(min_transactionDT)) / 30.436875) 
+
+# Display the maximum, minimum, and difference in TransactionDT values
+print(max_transactionDT)
+print(min_transactionDT)
+cat(dt_difference,  "months")
+```
+**The time difference between the maximum and minimum values of the "TransactionDT" column is approximately 6 months.**
+```{r}
+head(cleaned_data)
+```
+
+```{r}
+library(ggplot2)
+library(plotly)
+
+# Convert TransactionDT to POSIXct format
+cleaned_data$TransactionDT <- as.POSIXct(cleaned_data$TransactionDT, origin = "1970-01-01", tz = "UTC")
+
+```
+
+### Plotting the Distribution of TransactionDT column
+```{r}
+# Create a histogram plot
+histogram <- ggplot(cleaned_data, aes(x = TransactionDT)) +
+  geom_histogram(fill = "steelblue", color = "white") +
+  labs(x = "TransactionDT", y = "Count") +
+  ggtitle("Histogram of TransactionDT") +
+  theme(plot.title = element_text(hjust = 0.5)) + 
+  scale_x_datetime(date_labels = "%b", date_breaks = "1 month")# Center the title
+
+# Convert the plot to an interactive version
+interactive_histogram <- ggplotly(histogram)
+
+# Display the interactive histogram
+interactive_histogram
+```
+
+### Plotting the distribution of transactions by Month
+```{r}
+library(dplyr)
+library(ggplot2)
+library(plotly)
+
+# Convert TransactionDT to month format
+cleaned_data$TransactionMonth <- format(cleaned_data$TransactionDT, "%Y-%m")
+
+# Count the transactions by month
+transaction_counts <- cleaned_data %>%
+  group_by(TransactionMonth) %>%
+  summarise(Count = length(TransactionMonth))
+
+# Find the month with the highest transaction count
+highest_month <- transaction_counts %>%
+  filter(Count == max(Count)) %>%
+  pull(TransactionMonth)
+
+# Plot the transaction counts by month
+interactive_plot <- ggplot(transaction_counts, aes(x = TransactionMonth, y = Count)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  labs(x = "Month", y = "Transaction Count") +
+  ggtitle("Transactions by Month") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  geom_text(aes(label = Count), vjust = -0.5, size = 4) +
+  annotate("text", x = highest_month, y = transaction_counts$Count[transaction_counts$TransactionMonth == highest_month] + 50,
+           label = paste(transaction_counts$Count[transaction_counts$TransactionMonth == highest_month]), vjust = -1)
+
+# Convert the plot to an interactive version using plotly
+interactive_plot <- ggplotly(interactive_plot)
+
+# Display the interactive plot
+interactive_plot
+```
+**We can see that the month of January has the highest number of transactions with 134339 transactions.**\n
+**The month of July has the lowest number of transactions with 5493 transactions, this is because the dataset has transactions for only  2 days for the month of July**
+```{r}
+head(cleaned_data)
+```
+### Plotting the distribution of Transaction Amount
+```{r}
+library(ggplot2)
+
+# Plot the distribution of TransactionAmt with smooth KDE
+transaction_distribution <- ggplot(cleaned_data, aes(x = TransactionAmt)) +
+  geom_density(fill = "steelblue", color = "white") +
+  labs(x = "Transaction Amount", y = "Density") +
+  ggtitle("Distribution of Transaction Amount") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# Display the plot
+print(transaction_distribution)
+```
+### Plotting the Log distribution of Transaction Amount
+```{r}
+library(ggplot2)
+
+# Plot the distribution of log(TransactionAmt) with smooth KDE
+transaction_distribution <- ggplot(cleaned_data, aes(x = log(TransactionAmt))) +
+  geom_density(fill = "steelblue", color = "white") +
+  labs(x = "Log(Transaction Amount)", y = "Density") +
+  ggtitle("Distribution of Log(Transaction Amount)") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# Display the plot
+print(transaction_distribution)
+
+```
+### Plotting the distribution of Transaction Amount based on Fraud
+```{r}
+library(ggplot2)
+
+# Plot the distribution of TransactionAmt based on isFraud
+transaction_distribution <- ggplot(cleaned_data, aes(x = log(TransactionAmt), fill = as.factor(isFraud))) +
+  geom_density(alpha = 0.5) +
+  labs(x = "Transaction Amount", y = "Density", fill = "Is Fraud") +
+  ggtitle("Log Distribution of Transaction Amount by Fraud or Not Fraud") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# Display the plot
+print(transaction_distribution)
+
+```
+### Plotting the bar plot of ProductCD column
+```{r}
+library(ggplot2)
+
+# Plot the bar plot of ProductCD
+product_barplot <- ggplot(cleaned_data, aes(x = ProductCD)) +
+  geom_bar(fill = "steelblue") +
+  labs(x = "Product Code", y = "Count") +
+  ggtitle("Bar Plot of ProductCD") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# Display the plot
+print(product_barplot)
+```
+**The Product Code "W" occurs most frequently in the dataset.**
+
+### Plotting the bar plot of ProductCD based on Fraud
+```{r}
+library(ggplot2)
+
+# Plot the bar plot of ProductCD based on isFraud
+product_barplot <- ggplot(cleaned_data, aes(x = ProductCD, fill = factor(isFraud))) +
+  geom_bar() +
+  labs(x = "Product Code", y = "Count", fill = "isFraud") +
+  ggtitle("Bar Plot of ProductCD by isFraud") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# Display the plot
+print(product_barplot)
+
+```
+
+### Plotting the bar plot based on card network (card4) and Fraud or not 
+```{r}
+library(ggplot2)
+
+# Plot the bar plot of card4 based on isFraud
+card4_barplot <- ggplot(cleaned_data, aes(x = card4, fill = factor(isFraud))) +
+  geom_bar() +
+  labs(x = "Card Network", y = "Count", fill = "isFraud") +
+  ggtitle("Bar Plot of Card Network (card4) by isFraud") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# Display the plot
+print(card4_barplot)
+```
+**The VISA network has the most transactions and hence there are high fraudulent cases in the VISA network category**
+
+### Plotting the bar plot based on card type (card4) and Fraud or not 
+```{r}
+library(ggplot2)
+library(dplyr)
+
+# Calculate the count of each combination of card6 and isFraud
+card6_counts <- cleaned_data %>%
+  group_by(card6, isFraud) %>%
+  summarise(count = n()) %>%
+  ungroup()
+
+# Plot the bar plot of card6 based on isFraud with count values
+card6_barplot <- ggplot(card6_counts, aes(x = card6, y = count, fill = factor(isFraud))) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = count), vjust = -0.5, color = "black", size = 3) +
+  labs(x = "Card Type", y = "Count", fill = "isFraud") +
+  ggtitle("Bar Plot of Card Type (card6) by isFraud") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# Display the plot
+print(card6_barplot)
+
+```
+**Debit Card has the highest occurrences in the dataset and also the highest fraudulent cases with 10674 frauds followed by Credit card with 9950 frauds and 139036 occurrences.**
+
+### Top 10 email domains and their frequency in the dataset
+```{r}
+# Find the top 10 email domains
+top_10_domains <- cleaned_data %>%
+  filter(!is.na(P_emaildomain)) %>%
+  count(P_emaildomain) %>%
+  arrange(desc(n)) %>%
+  head(10)
+
+# Calculate the total frequency
+total_frequency <- sum(top_10_domains$n)
+
+# Create a data frame with domain names and frequencies
+top_10_domains_df <- data.frame(EmailDomain = top_10_domains$P_emaildomain, Frequency = top_10_domains$n)
+
+# Add column to count number of frauds
+top_10_domains_df$isFraud <- sapply(top_10_domains_df$EmailDomain, function(domain) {
+  sum(cleaned_data$P_emaildomain == domain & cleaned_data$isFraud == 1, na.rm = TRUE)
+})
+
+# Add percentage columns
+top_10_domains_df$Frequency_Percentage <- (top_10_domains_df$Frequency / total_frequency) * 100
+top_10_domains_df$isFraud_Percentage <- (top_10_domains_df$isFraud / top_10_domains_df$Frequency) * 100
+
+# Display the top 10 email domains with frequencies, percentages, and number of frauds
+print(top_10_domains_df)
+```
+### Top 10 email domains sorted by Fraud percentage
+```{r}
+# Sort the top 10 domains by isFraud_Percentage in descending order
+top_10_domains_df <- top_10_domains_df[order(-top_10_domains_df$isFraud_Percentage), ]
+
+# Display the sorted table
+print(top_10_domains_df)
+```
+The above table displays the top 10 email domains based on their frequency in the dataset. Each row represents a specific email domain and provides information about the frequency, number of fraud cases ("isFraud"), percentage of occurrences, and the percentage of fraud cases ("isFraud_Percentage") for that domain.
+
+Here's the explanation of each column:
+
+EmailDomain: The name of the email domain.
+Frequency: The total number of occurrences of that email domain in the dataset.
+isFraud: The number of fraud cases associated with that email domain.
+Percentage: The percentage of occurrences of that email domain out of the total occurrences.
+isFraud_Percentage: The percentage of fraud cases out of the total occurrences for that email domain.
+
+For example, let's take the row with EmailDomain "outlook.com" because even though "gmail.com" has the highest frequency it has only 4.3541% of isFraud_Percentage.
+
+Frequency: 5096 indicates that "outlook.com" appears 5096 times in the dataset.
+isFraud: 482 means that out of those 5096 occurrences of "outlook.com", 482 cases are classified as fraud.
+Percentage: 1.0907488% represents the percentage of occurrences of "outlook.com" out of the total occurrences of all email domains.
+isFraud_Percentage: 9.4583987% indicates the percentage of fraud cases out of the total occurrences of "outlook.com".
+
+You can interpret the other rows in a similar manner, where the values for each domain provide insights into their frequency, fraud cases, and the corresponding percentages.
+
+
+```{r}
+head(cleaned_data)
+```
+```{r}
+# Removing rows with missing values
+df_clean <- na.omit(cleaned_data)
+```
+
+```{r}
+# Viewing the dataset after removing missing values
+head(df_clean)
+```
+
+
+```{r}
+# Finding the missing values in the clean dataset
+find_missing_values(df_clean)
+```
+### Plotting a bar plot to view the class imbalance in the dataset after removing missing values
+```{r}
+# Loading the required library
+library(ggplot2)
+
+# Calculating the count of each category
+count_data <- data.frame(table(df_clean$isFraud))
+
+# Plot the bar plot with count labels
+ggplot(count_data, aes(x = factor(Var1), y = Freq)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  geom_text(aes(label = Freq), vjust = -0.5, size = 3, color = "black") +
+  labs(x = "isFraud", y = "Count") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  ggtitle("Fraudulent Transactions")
+```
+
+# Feature Engineering
+```{r}
+head(df_clean)
+```
+```{r}
+# Replacing TRUE and FALSE with 1 and 0 in column M6
+df_clean$M6 <- as.integer(df_clean$M6)
+
+# Verify the updated values
+head(df_clean$M6)
+```
+```{r}
+head(df_clean)
+```
+```{r}
+# Defining the list of columns to remove
+columns_to_remove <- c("ProductCD","TransactionDT", "TransactionMonth")
+
+# Removing the columns from the dataset
+df_clean <- df_clean[, !(names(df_clean) %in% columns_to_remove)]
+
+```
+
+
+### Encoding the categorical columns in the cleaned dataset
+```{r}
+# Categorical variables
+categorical_vars <- c( "card4", "card6", "P_emaildomain")
+```
+
+```{r}
+categorical_vars
+```
+
+
+```{r}
+# Categorical variables
+categorical_vars <- c("card4", "card6", "P_emaildomain")
+
+# Converting categorical variables to factors
+df_clean[categorical_vars] <- lapply(df_clean[categorical_vars], as.factor)
+
+# Performing one-hot encoding
+df_encoded <- model.matrix(~.-1, data = df_clean[, categorical_vars])
+
+# Combining encoded variables with the original dataset
+df_encoded <- cbind(df_clean, df_encoded)
+
+# Removing the original categorical variables
+df_encoded <- df_encoded[, !(names(df_encoded) %in% categorical_vars)]
+```
+
+```{r}
+# Printing the encoded dataset
+print(df_encoded)
+
+```
+# Stratified Sampling the encoded dataset 
+```{r}
+library(caret)
+
+# Setting the seed for reproducibility
+set.seed(123)
+
+# Performing stratified sampling
+sampled_indices <- createDataPartition(df_encoded$isFraud, p = 0.5, list = FALSE)
+
+# Obtaining the stratified sample
+stratified_sample <- df_encoded[sampled_indices, ]
+
+```
+
+```{r}
+head(stratified_sample)
+```
+
+# Baseline Random Forest Model Training using Parallel processing
+```{r}
+# Install and load required packages
+# install.packages("doParallel")
+library(randomForest)
+library(doParallel)
+```
+
+```{r}
+
+# Set the number of cores for parallel processing
+num_cores <- parallel::detectCores() - 1  # Use all available cores except one
+cl <- makeCluster(num_cores)
+registerDoParallel(cl)
+
+# Split the data into input features (x) and target variable (y)
+x <- stratified_sample[, !names(stratified_sample) %in% "isFraud"]  # Exclude the "isFraud" column
+y <- stratified_sample$isFraud
+
+# Fit the random forest classification model with parallel processing
+rf_model <- randomForest(x, y, ntree = 5, mtry = sqrt(ncol(x)), type = "classification")
+
+
+# Stop the parallel processing
+stopCluster(cl)
+registerDoSEQ()
+
+
+```
+
+## Top 10 important features found using Random Forest model
+```{r}
+# Extract feature importance
+importance <- importance(rf_model)
+```
+
+
+```{r}
+# Get the top 10 important features
+top_10_indices <- order(importance, decreasing = TRUE)[1:10]
+top_10_indices
+```
+```{r}
+top_10_indices = c(10,  2,  1,  8,  3, 28, 26, 27, 25, 23)
+top_10_indices
+```
+
+```{r}
+# Get the column names based on the indices
+selected_columns <- colnames(stratified_sample)[top_10_indices]
+
+# Print the selected columns
+print(selected_columns)
+```
+
+
+
+# Splitting the data into train and test for builing other models
+
+```{r}
+df_selected <- df_clean
+
+```
+
+```{r}
+# Preparing the data
+x <- df_selected[, -which(names(df_selected) == "isFraud")]  # Features (excluding target variable)
+y <- df_selected$isFraud  # Target variable
+
+# Splitting the data into training and testing sets
+set.seed(123)  # Set seed for reproducibility
+train_indices <- createDataPartition(y, p = 0.9, list = FALSE)
+train_x <- x[train_indices, ]
+train_y <- y[train_indices]
+test_x <- x[-train_indices, ]
+test_y <- y[-train_indices]
+
+```
+
+
+# Building a LightGBM model
+```{r}
+nb_feat <- ncol(train_x) # Nb features
+mono_const <- rep(0, nb_feat)
+mono_const[1] <- 1    
+
+train_params <- list(
+  num_leaves = 15,           # Max nb leaves in tree
+  learning_rate = 0.1,       # Learning rate
+  objective = "binary",      # Loss function
+  max_depth = 4,             # Max depth of trees
+  min_data_in_leaf = 50,     # Nb points in leaf
+  bagging_fraction = 0.5,    # % of observations
+  feature_fraction = 0.7,    # % of features
+  nthread = 4,               # Parallelization
+  boosting = "dart",         # DART = dropping
+  drop_rate = 0.1,           # Dropping rate
+  lambda_l1 = 0.3,           # Penalizing leave norms
+  seed = 42,                 # For reproducibility?
+  # early stopping not available with DARTs
+  #early_stopping_round = 10, # Early stopping after X round if no improvement
+  monotone_constraints = mono_const,
+  force_row_wise = T
+)
+```
+
+```{r}
+train_x
+```
+```{r}
+train_y
+```
+
+### Function to train a LightGBM mode
+```{r}
+library(lightgbm)
+bst <- lightgbm(
+  data = train_x |> as.matrix(),
+  label = train_y, # Target / label
+  params = train_params,        # Passing parameter values
+  nrounds = 40                 # Number of trees in the model
+)
+
+```
+### Cross Validation
+```{r}
+cv_model <- lgb.cv(
+  params = train_params,
+  data = train_x |> as.matrix(),
+  label = train_y, # Target / label
+  eval_freq = 80,
+  nrounds = 3,                  # Still number of trees
+  nfold = 5
+)
+```
+### Testing several parameter values
+```{r}
+num_leaves <- c(5,30)
+learning_rate <- c(0.01, 0.05, 0.2)
+pars <- expand.grid(num_leaves, learning_rate)
+num_leaves <- pars[,1]
+learning_rate <- pars[,2]
+
+```
+
+```{r}
+train_func <- function(num_leaves, learning_rate, train_x){
+  train_params <- list(             # First, the list of params
+    num_leaves = num_leaves,        # Max nb leaves in tree
+    learning_rate = learning_rate,  # Learning rate
+    objective = "binary",           # Loss function
+    max_depth = 3,                  # Max depth of trees
+    min_data_in_leaf = 50,          # Nb points in leaf
+    bagging_fraction = 0.5,         # % of observations
+    feature_fraction = 0.7,         # % of features
+    nthread = 4,                    # Parallelization
+    force_row_wise = T
+  )
+  # Next we train
+  bst <- lightgbm(
+    data = train_x |> as.matrix(),
+    label = train_y, # Target / label
+    params = train_params,        # Passing parameter values
+    eval_freq = 50,
+    nrounds = 10                  # Number of trees in the model
+  )
+  # Next, we record the final loss (depends on the model/loss defined above)
+  return(loss = bst$record_evals$train$binary_logloss$eval[[10]]) 
+}
+train_func(10, 0.1, train_x) # Testing
+```
+```{r}
+# install.packages("purrr")  # Install purrr if not already installed
+library(purrr)             # Load the purrr package
+
+```
+
+
+
+### Performing a grid search
+```{r}
+grd <- pmap(list(num_leaves, learning_rate),     # Parameters for the grid search
+            train_func,                          # Function on which to apply the grid search
+            train_x = train_x            # Non-changing argument (data is fixed)
+)
+```
+```{r}
+grd <- bind_cols(pars, tibble(loss = grd))
+```
+
+
+### Computing the top 20 important features of the LightGBM model
+```{r}
+lgb.importance(bst) |>
+  top_n(20, Gain) |>
+  ggplot(aes(x = Gain, y = reorder(Feature, Gain))) + geom_col(fill = "#22AABB", alpha = 0.7) +
+  theme_bw() + theme(axis.title.y = element_blank())
+```
+**Looks like columns V317 and V308 are the most important features in the LGBM model**
+
+### Local Interpretation of the LightGBM model 
+```{r}
+LGB_intepret <- lgb.interprete(bst, test_x |> data.matrix(), 1:2)
+LGB_intepret
+```
+
+```{r}
+lgb.plot.interpretation(
+  tree_interpretation_dt = LGB_intepret[[1L]]
+  , top_n = 20
+) 
+```
+
+
+# References
+
+https://www.kaggle.com/c/ieee-fraud-detection
+
+https://www.kaggle.com/code/artgor/eda-and-models
+
+https://www.kaggle.com/code/artgor/eda-and-models
+
+https://www.kaggle.com/code/kabure/extensive-eda-and-modeling-xgb-hyperopt
+
+https://www.kaggle.com/code/shahules/tackling-class-imbalance
+
+https://www.kaggle.com/code/cdeotte/xgb-fraud-with-magic-0-9600
+
+https://www.kaggle.com/code/jesucristo/fraud-complete-eda
+
+https://www.kaggle.com/code/robikscube/ieee-fraud-detection-first-look-and-eda
+
+https://www.kaggle.com/code/alijs1/ieee-transaction-columns-reference/notebook
+
+Note: Used ChatGPT to debug errors in the code.
+
+
+
+
