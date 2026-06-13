@@ -23,3 +23,7 @@ Feature Importance and Interpretability: The repository offers techniques to com
 Local Interpretation of the LightGBM Model: The repository provides code and explanations for locally interpreting the LightGBM model. Techniques such as permutation importance, SHAP (SHapley Additive exPlanations), and LIME (Local Interpretable Model-Agnostic Explanations) are employed to understand the model's decision-making process.
 
 References: The repository includes a reference section with relevant sources, articles, and research papers related to fraud detection and the techniques applied in the project.
+## References
+- [Project Homepage](https://sugumaran-balasubramaniyan.com)
+- [Author GitHub](https://github.com/Sugumaran-Balasubramaniyan)
+
